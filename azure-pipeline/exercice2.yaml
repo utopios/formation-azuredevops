@@ -1,0 +1,72 @@
+trigger:
+- '*'
+
+pool:
+  name: 'Default'
+
+variables:
+  DOTNET_SDK_VERSION: '6.0.x' 
+  DEPLOY_ENV: ''  
+stages:
+- stage: Prepare
+  displayName: 'Préparer le pipeline et vérifier la branche'
+  jobs:
+  - job: BranchCheck
+    displayName: 'Vérifier la branche'
+    steps:
+    - script: |
+        echo "Branche actuelle : $(Build.SourceBranchName)"
+      displayName: 'Afficher la branche'
+
+    - script: |
+        if "$(Build.SourceBranchName)" == "main" (
+          echo "Environnement = Production"
+          echo ##vso[task.setvariable variable=DEPLOY_ENV]Production
+        ) else if "$(Build.SourceBranchName)" == "develop" (
+          echo "Environnement = Staging"
+          echo ##vso[task.setvariable variable=DEPLOY_ENV]Staging
+        ) else (
+          echo "Environnement = Test"
+          echo ##vso[task.setvariable variable=DEPLOY_ENV]Test
+        )
+      displayName: 'Configurer l’environnement de déploiement'
+
+- stage: Validate
+  displayName: 'Valider la solution'
+  dependsOn: Prepare
+  condition: and(succeeded(), ne(variables['DEPLOY_ENV'], '')) 
+  jobs:
+  - job: FindSolution
+    displayName: 'Rechercher un fichier .sln'
+    steps:
+    - script: |
+        echo "Recherche du fichier .sln dans $(System.DefaultWorkingDirectory)..."
+        dir /s *.sln > solution_path.txt || exit 1
+      displayName: 'Rechercher le fichier .sln'
+
+    - script: |
+        set /p SOLUTION_PATH=<solution_path.txt
+        echo "Fichier trouvé : $(SOLUTION_PATH)"
+        echo ##vso[task.setvariable variable=SOLUTION_PATH]$SOLUTION_PATH
+      displayName: 'Définir le chemin du fichier .sln'
+
+- stage: Deploy
+  displayName: 'Déployer l’application'
+  dependsOn: Validate
+  condition: and(succeeded(), eq(variables['Build.SourceBranchName'], 'main'))  # Exécuter uniquement sur la branche main
+  jobs:
+  - job: Deployment
+    displayName: 'Déployer l’application'
+    steps:
+    - script: |
+        echo "Déploiement en cours pour l’environnement $(DEPLOY_ENV)..."
+        echo "Fichier de solution utilisé : $(SOLUTION_PATH)"
+      displayName: 'Effectuer le déploiement'
+
+    - script: |
+        if $(Agent.JobStatus) == "Succeeded" (
+          echo "Déploiement réussi !"
+        ) else (
+          echo "Échec du déploiement."
+        )
+      displayName: 'Résultat du déploiement'
