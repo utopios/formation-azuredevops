@@ -1,0 +1,78 @@
+trigger:
+- main
+- develop
+
+pool:
+  name: 'Default'
+
+variables:
+  DOTNET_SDK_VERSION: '2.2.x'
+
+stages:
+- stage: Build
+  displayName: 'Restaurer et compiler l’application'
+  jobs:
+  - job: BuildJob
+    displayName: 'Restaurer et compiler'
+    steps:
+    - task: UseDotNet@2
+      displayName: 'Installer le SDK .NET $(DOTNET_SDK_VERSION)'
+      inputs:
+        packageType: 'sdk'
+        version: '$(DOTNET_SDK_VERSION)'
+
+    - task: DotNetCoreCLI@2
+      displayName: 'Restaurer les dépendances de tous les projets'
+      inputs:
+        command: 'restore'
+        projects: '**/*.csproj'
+
+    - task: DotNetCoreCLI@2
+      displayName: 'Compiler tous les projets'
+      inputs:
+        command: 'build'
+        projects: '**/*.csproj'
+        arguments: '--configuration Release'
+
+- stage: Test
+  displayName: 'Exécuter tous les tests'
+  dependsOn: Build
+  condition: succeeded()
+  jobs:
+  - job: TestJob
+    displayName: 'Exécuter tous les tests unitaires et d’acceptation'
+    steps:
+    - task: DotNetCoreCLI@2
+      displayName: 'Exécuter tous les tests'
+      inputs:
+        command: 'test'
+        projects: '**/*.Tests.csproj' 
+        arguments: '--configuration Release --logger trx --results-directory $(System.DefaultWorkingDirectory)/TestResults'
+        publishTestResults: true
+
+    - task: PublishTestResults@2
+      displayName: 'Publier les résultats des tests'
+      inputs:
+        testResultsFiles: '$(System.DefaultWorkingDirectory)/TestResults/*.trx'
+        mergeTestResults: true
+
+- stage: Publish
+  displayName: 'Publier les artefacts'
+  dependsOn: Test
+  condition: succeeded()
+  jobs:
+  - job: PublishJob
+    displayName: 'Publier l’application'
+    steps:
+    - task: DotNetCoreCLI@2
+      displayName: 'Publier l’application'
+      inputs:
+        command: 'publish'
+        projects: 'src/SampleApp/SampleApp.csproj'
+        arguments: '--configuration Release --output $(Build.ArtifactStagingDirectory)'
+
+    - task: PublishBuildArtifacts@1
+      displayName: 'Publier les artefacts'
+      inputs:
+        PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+        ArtifactName: 'SampleApp'
