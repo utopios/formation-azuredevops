@@ -1,0 +1,54 @@
+trigger:
+- master
+pool:
+  name: 'Default'  
+  
+
+variables:
+  DOTNET_SDK_VERSION: '6.0.x'  
+
+stages:
+- stage: CheckSDK
+  displayName: 'Vérification et préparation du SDK .NET Core'
+  jobs:
+  - job: VerifySDK
+    displayName: 'Vérification du SDK et configuration'
+    steps:
+    - task: UseDotNet@2
+      displayName: 'Installer ou utiliser le SDK .NET $(DOTNET_SDK_VERSION)'
+      inputs:
+        packageType: 'sdk'
+        version: '$(DOTNET_SDK_VERSION)'
+
+    - task: CmdLine@2
+      displayName: 'Vérifier la version installée du SDK'
+      inputs:
+        script: |
+          dotnet --version
+
+- stage: Build
+  displayName: 'Restaurer, compiler et tester la solution'
+  dependsOn: CheckSDK
+  jobs:
+  - job: BuildJob
+    displayName: 'Restauration, compilation et tests'
+    steps:
+    - task: DotNetCoreCLI@2
+      displayName: 'Restaurer les dépendances'
+      inputs:
+        command: 'restore'
+        projects: 'MySolution.sln' 
+
+    - task: DotNetCoreCLI@2
+      displayName: 'Compiler la solution'
+      inputs:
+        command: 'build'
+        projects: 'MySolution.sln'
+        arguments: '--configuration Release'
+
+    - task: DotNetCoreCLI@2
+      displayName: 'Exécuter les tests unitaires'
+      inputs:
+        command: 'test'
+        projects: 'MySolution.sln'
+        arguments: '--configuration Release'
