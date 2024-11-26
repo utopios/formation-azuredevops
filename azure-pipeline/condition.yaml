@@ -1,0 +1,52 @@
+trigger:
+- main
+
+pool:
+  name: 'Default'
+
+variables:
+  buildConfiguration: 'Release'
+
+steps:
+- task: UseDotNet@2
+  displayName: 'Installer .NET SDK'
+  inputs:
+    packageType: sdk
+    version: '7.x'
+
+# Étape 1 : Restaurer les dépendances (exécutée uniquement sur la branche main)
+- task: DotNetCoreCLI@2
+  displayName: 'Restaurer les dépendances'
+  inputs:
+    command: 'restore'
+    projects: '**/*.sln'
+  condition: eq(variables['Build.SourceBranch'], 'refs/heads/main')  # Condition pour la branche main
+
+# Étape 2 : Compiler la solution
+- task: DotNetCoreCLI@2
+  displayName: 'Compiler la solution'
+  inputs:
+    command: 'build'
+    projects: '**/*.sln'
+    arguments: '--configuration $(buildConfiguration)'
+  condition: succeeded()  # Condition pour vérifier que les étapes précédentes ont réussi
+
+# Étape 3 : Exécuter les tests (uniquement si la compilation a réussi et si une variable est définie)
+- task: DotNetCoreCLI@2
+  displayName: 'Exécuter les tests'
+  inputs:
+    command: 'test'
+    projects: '**/*Tests.csproj'
+    arguments: '--configuration $(buildConfiguration)'
+  condition: and(succeeded(), eq(variables['runTests'], 'true'))  # Tests exécutés si runTests=true
+
+# Étape 4 : Publier les artefacts (uniquement sur les branches de release)
+- task: PublishBuildArtifacts@1
+  displayName: 'Publier les artefacts'
+  inputs:
+    PathtoPublish: '$(Build.ArtifactStagingDirectory)'
+    ArtifactName: 'drop'
+    publishLocation: 'Container'
+  condition: or(
+    startsWith(variables['Build.SourceBranch'], 'refs/heads/release'),
+    eq(variables['Build.SourceBranch'], 'refs/heads/main'))
