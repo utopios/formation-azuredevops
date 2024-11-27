@@ -1,0 +1,51 @@
+trigger:
+- master
+
+pool:
+  name: "Default"
+
+variables:
+  solution: '**/*.sln'
+  buildPlatform: 'Any CPU'
+  buildConfiguration: 'Release'
+  webDeploySite: ''
+
+steps:
+# Étape 1 : Installer NuGet
+- task: NuGetToolInstaller@1
+  displayName: 'Install NuGet Tool'
+
+# Étape 2 : Restaurer les packages NuGet
+- task: NuGetCommand@2
+  displayName: 'Restore NuGet Packages'
+  inputs:
+    restoreSolution: '$(solution)'
+
+# Étape 3 : Compiler l'application avec MSBuild
+- task: MSBuild@1
+  displayName: 'Build Solution'
+  inputs:
+    solution: '$(solution)'
+    platform: '$(buildPlatform)'
+    configuration: '$(buildConfiguration)'
+
+# Étape 4 : Publier l'application pour Web Deploy
+- task: MSBuild@1
+  displayName: 'Publish for Web Deploy'
+  inputs:
+    solution: '$(solution)'
+    msbuildArguments: '/p:DeployOnBuild=true /p:WebPublishMethod=Package /p:PackageAsSingleFile=true /p:PackageLocation="$(Build.ArtifactStagingDirectory)\WebApp.zip"'
+    platform: '$(buildPlatform)'
+    configuration: '$(buildConfiguration)'
+
+# Étape 5 : Déployer sur IIS via Web Deploy avec connexion de service
+- task: IISWebAppDeploymentOnMachineGroup@0
+  displayName: 'Deploy to Remote IIS via Service Connection'
+  inputs:
+    ConnectionType: 'ServicePrincipal'
+    ConnectedServiceName: 'IISDeploymentConnection'
+    WebSiteName: '$(webDeploySite)'
+    Package: '$(Build.ArtifactStagingDirectory)\WebApp.zip'
+    TakeAppOfflineFlag: true
+    RemoveAdditionalFilesFlag: true
+    AdditionalArguments: '-allowUntrusted'
